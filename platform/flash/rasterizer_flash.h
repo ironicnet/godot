@@ -5,7 +5,7 @@
 /*                GODOT ENGINE                   */
 /*************************************************/
 /*       Source code within this file is:        */
-/*  (c) 2007-2010 Juan Linietsky, Ariel Manzur   */
+/*  (c) 2007-2016 Juan Linietsky, Ariel Manzur   */
 /*             All Rights Reserved.              */
 /*************************************************/
 
@@ -577,7 +577,7 @@ class RasterizerFlash : public Rasterizer {
 					}
 				} else {
 
-					return B->material->shader_cache < B->material->shader_cache;
+					return A->material->shader_cache < B->material->shader_cache;
 				}
 			}
 		};

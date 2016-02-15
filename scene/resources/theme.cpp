@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -40,9 +40,9 @@ bool Theme::_set(const StringName& p_name, const Variant& p_value) {
 
 	if (sname.find("/")!=-1) {
 
-		String type=sname.get_slice("/",1);
-		String node_type=sname.get_slice("/",0);
-		String name=sname.get_slice("/",2);
+		String type=sname.get_slicec('/',1);
+		String node_type=sname.get_slicec('/',0);
+		String name=sname.get_slicec('/',2);
 
 		if (type=="icons") {
 
@@ -75,9 +75,9 @@ bool Theme::_get(const StringName& p_name,Variant &r_ret) const {
 
 	if (sname.find("/")!=-1) {
 
-		String type=sname.get_slice("/",1);
-		String node_type=sname.get_slice("/",0);
-		String name=sname.get_slice("/",2);
+		String type=sname.get_slicec('/',1);
+		String node_type=sname.get_slicec('/',0);
+		String name=sname.get_slicec('/',2);
 
 		if (type=="icons") {
 
@@ -105,6 +105,9 @@ bool Theme::_get(const StringName& p_name,Variant &r_ret) const {
 
 void Theme::_get_property_list( List<PropertyInfo> *p_list) const {
 	
+
+	List<PropertyInfo> list;
+
 	const StringName *key=NULL;
 	
 	while((key=icon_map.next(key))) {
@@ -113,7 +116,7 @@ void Theme::_get_property_list( List<PropertyInfo> *p_list) const {
 	
 		while((key2=icon_map[*key].next(key2))) {
 
-			p_list->push_back( PropertyInfo( Variant::OBJECT, String()+*key+"/icons/"+*key2, PROPERTY_HINT_RESOURCE_TYPE, "Texture" ) );
+			list.push_back( PropertyInfo( Variant::OBJECT, String()+*key+"/icons/"+*key2, PROPERTY_HINT_RESOURCE_TYPE, "Texture" ) );
 		}
 	}
 	
@@ -125,7 +128,7 @@ void Theme::_get_property_list( List<PropertyInfo> *p_list) const {
 	
 		while((key2=style_map[*key].next(key2))) {
 		
-			p_list->push_back( PropertyInfo( Variant::OBJECT, String()+*key+"/styles/"+*key2, PROPERTY_HINT_RESOURCE_TYPE, "StyleBox" ) );
+			list.push_back( PropertyInfo( Variant::OBJECT, String()+*key+"/styles/"+*key2, PROPERTY_HINT_RESOURCE_TYPE, "StyleBox" ) );
 		}
 	}
 	
@@ -138,7 +141,7 @@ void Theme::_get_property_list( List<PropertyInfo> *p_list) const {
 	
 		while((key2=font_map[*key].next(key2))) {
 		
-			p_list->push_back( PropertyInfo( Variant::OBJECT, String()+*key+"/fonts/"+*key2, PROPERTY_HINT_RESOURCE_TYPE, "Font" ) );
+			list.push_back( PropertyInfo( Variant::OBJECT, String()+*key+"/fonts/"+*key2, PROPERTY_HINT_RESOURCE_TYPE, "Font" ) );
 		}
 	}
 	
@@ -150,7 +153,7 @@ void Theme::_get_property_list( List<PropertyInfo> *p_list) const {
 	
 		while((key2=color_map[*key].next(key2))) {
 		
-			p_list->push_back( PropertyInfo( Variant::COLOR, String()+*key+"/colors/"+*key2 ) );
+			list.push_back( PropertyInfo( Variant::COLOR, String()+*key+"/colors/"+*key2 ) );
 		}
 	}
 	
@@ -162,8 +165,13 @@ void Theme::_get_property_list( List<PropertyInfo> *p_list) const {
 	
 		while((key2=constant_map[*key].next(key2))) {
 		
-			p_list->push_back( PropertyInfo( Variant::INT, String()+*key+"/constants/"+*key2 ) );
+			list.push_back( PropertyInfo( Variant::INT, String()+*key+"/constants/"+*key2 ) );
 		}
+	}
+
+	list.sort();
+	for(List<PropertyInfo>::Element *E=list.front();E;E=E->next()) {
+		p_list->push_back(E->get());
 	}
 	
 }
@@ -258,7 +266,52 @@ void Theme::get_icon_list(StringName p_type, List<StringName> *p_list) const {
 
 		p_list->push_back(*key);
 	}
+	
+}
 
+void Theme::set_shader(const StringName &p_name,const StringName &p_type,const Ref<Shader>& p_shader) {
+	bool new_value=!shader_map.has(p_type) || !shader_map[p_type].has(p_name);
+
+	shader_map[p_type][p_name]=p_shader;	
+
+	if (new_value) {
+		_change_notify();
+		emit_changed();;
+	}
+}
+
+Ref<Shader> Theme::get_shader(const StringName &p_name, const StringName &p_type) const {
+	if (shader_map.has(p_type) && shader_map[p_type].has(p_name) && shader_map[p_type][p_name].is_valid()) {
+		return shader_map[p_type][p_name];
+	} else {
+		return NULL;
+	}
+}
+
+bool Theme::has_shader(const StringName &p_name, const StringName &p_type) const {
+	return (shader_map.has(p_type) && shader_map[p_type].has(p_name) && shader_map[p_type][p_name].is_valid());
+}
+
+void Theme::clear_shader(const StringName &p_name, const StringName &p_type) {
+	ERR_FAIL_COND(!shader_map.has(p_type));
+	ERR_FAIL_COND(!shader_map[p_type].has(p_name));
+
+	shader_map[p_type].erase(p_name);
+	_change_notify();
+	emit_changed();;
+}
+
+void Theme::get_shader_list(const StringName &p_type, List<StringName> *p_list) const {
+	if (!shader_map.has(p_type))
+		return;
+
+	const StringName *key=NULL;
+
+	while((key=shader_map[p_type].next(key))) {
+
+		p_list->push_back(*key);
+	}
+	
 }
 
 
@@ -544,36 +597,36 @@ void Theme::_bind_methods() {
 	ObjectTypeDB::bind_method(_MD("get_icon:Texture","name","type"),&Theme::get_icon);
 	ObjectTypeDB::bind_method(_MD("has_icon","name","type"),&Theme::has_icon);
 	ObjectTypeDB::bind_method(_MD("clear_icon","name","type"),&Theme::clear_icon);
-	ObjectTypeDB::bind_method(_MD("get_icon_list"),&Theme::_get_icon_list);
+	ObjectTypeDB::bind_method(_MD("get_icon_list","type"),&Theme::_get_icon_list);
 
 	ObjectTypeDB::bind_method(_MD("set_stylebox","name","type","texture:StyleBox"),&Theme::set_stylebox);
 	ObjectTypeDB::bind_method(_MD("get_stylebox:StyleBox","name","type"),&Theme::get_stylebox);
 	ObjectTypeDB::bind_method(_MD("has_stylebox","name","type"),&Theme::has_stylebox);
 	ObjectTypeDB::bind_method(_MD("clear_stylebox","name","type"),&Theme::clear_stylebox);
-	ObjectTypeDB::bind_method(_MD("get_stylebox_list"),&Theme::_get_stylebox_list);
+	ObjectTypeDB::bind_method(_MD("get_stylebox_list","type"),&Theme::_get_stylebox_list);
 
 	ObjectTypeDB::bind_method(_MD("set_font","name","type","font:Font"),&Theme::set_font);
 	ObjectTypeDB::bind_method(_MD("get_font:Font","name","type"),&Theme::get_font);
 	ObjectTypeDB::bind_method(_MD("has_font","name","type"),&Theme::has_font);
 	ObjectTypeDB::bind_method(_MD("clear_font","name","type"),&Theme::clear_font);
-	ObjectTypeDB::bind_method(_MD("get_font_list"),&Theme::_get_font_list);
+	ObjectTypeDB::bind_method(_MD("get_font_list","type"),&Theme::_get_font_list);
 
 	ObjectTypeDB::bind_method(_MD("set_color","name","type","color"),&Theme::set_color);
 	ObjectTypeDB::bind_method(_MD("get_color","name","type"),&Theme::get_color);
 	ObjectTypeDB::bind_method(_MD("has_color","name","type"),&Theme::has_color);
 	ObjectTypeDB::bind_method(_MD("clear_color","name","type"),&Theme::clear_color);
-	ObjectTypeDB::bind_method(_MD("get_color_list"),&Theme::_get_color_list);
+	ObjectTypeDB::bind_method(_MD("get_color_list","type"),&Theme::_get_color_list);
 
 	ObjectTypeDB::bind_method(_MD("set_constant","name","type","constant"),&Theme::set_constant);
 	ObjectTypeDB::bind_method(_MD("get_constant","name","type"),&Theme::get_constant);
 	ObjectTypeDB::bind_method(_MD("has_constant","name","type"),&Theme::has_constant);
 	ObjectTypeDB::bind_method(_MD("clear_constant","name","type"),&Theme::clear_constant);
-	ObjectTypeDB::bind_method(_MD("get_constant_list"),&Theme::_get_constant_list);
+	ObjectTypeDB::bind_method(_MD("get_constant_list","type"),&Theme::_get_constant_list);
 
 	ObjectTypeDB::bind_method(_MD("set_default_font","font"),&Theme::set_default_theme_font);
 	ObjectTypeDB::bind_method(_MD("get_default_font"),&Theme::get_default_theme_font);
 
-	ObjectTypeDB::bind_method(_MD("get_type_list"),&Theme::_get_type_list);
+	ObjectTypeDB::bind_method(_MD("get_type_list","type"),&Theme::_get_type_list);
 
 	ObjectTypeDB::bind_method("copy_default_theme",&Theme::copy_default_theme);
 
@@ -593,7 +646,9 @@ Theme::~Theme()
 
 
 
-RES ResourceFormatLoaderTheme::load(const String &p_path,const String& p_original_path) {
+RES ResourceFormatLoaderTheme::load(const String &p_path, const String& p_original_path, Error *r_error) {
+	if (r_error)
+		*r_error=ERR_CANT_OPEN;
 
 	Error err;
 	FileAccess *f = FileAccess::open(p_path,FileAccess::READ,&err);
@@ -603,6 +658,8 @@ RES ResourceFormatLoaderTheme::load(const String &p_path,const String& p_origina
 	String base_path = p_path.get_base_dir();
 	Ref<Theme> theme( memnew( Theme ) );
 	Map<StringName,Variant> library;
+	if (r_error)
+		*r_error=ERR_FILE_CORRUPT;
 
 	bool reading_library=false;
 	int line=0;
@@ -994,6 +1051,9 @@ RES ResourceFormatLoaderTheme::load(const String &p_path,const String& p_origina
 
 	f->close();
 	memdelete(f);
+
+	if (r_error)
+		*r_error=OK;
 
 	return theme;
 }

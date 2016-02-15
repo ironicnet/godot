@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -78,6 +78,7 @@ public:
 		READ=1,
 		WRITE=2,
 		READ_WRITE=3,
+		WRITE_READ=7,
 	};
 	
 	virtual void close()=0; ///< close a file 
@@ -101,7 +102,7 @@ public:
 
 	virtual int get_buffer(uint8_t *p_dst,int p_length) const; ///< get an array of bytes
 	virtual String get_line() const;
-	virtual Vector<String> get_csv_line() const;
+	virtual Vector<String> get_csv_line(String delim=",") const;
 	
 	/**< use this for files WRITTEN in _big_ endian machines (ie, amiga/mac)
 	 * It's not about the current CPU type but file formats.

@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -29,6 +29,8 @@
 #include "file_dialog.h"
 #include "scene/gui/label.h"
 #include "print_string.h"
+#include "os/keyboard.h"
+
 
 
 FileDialog::GetIconFunc FileDialog::get_icon_func=NULL;
@@ -44,12 +46,56 @@ VBoxContainer *FileDialog::get_vbox() {
 }
 
 void FileDialog::_notification(int p_what) {
+
+	if (p_what==NOTIFICATION_ENTER_TREE) {
+
+		refresh->set_icon(get_icon("reload"));
+	}
 	
 	if (p_what==NOTIFICATION_DRAW) {
 
 		//RID ci = get_canvas_item();
 		//get_stylebox("panel","PopupMenu")->draw(ci,Rect2(Point2(),get_size()));
-	}	
+	}
+
+	if (p_what==NOTIFICATION_POPUP_HIDE) {
+
+		set_process_unhandled_input(false);
+	}
+}
+
+void FileDialog::_unhandled_input(const InputEvent& p_event) {
+
+	if (p_event.type==InputEvent::KEY && is_window_modal_on_top()) {
+
+		const InputEventKey &k=p_event.key;
+
+		if (k.pressed) {
+
+			bool handled=true;
+
+			switch (k.scancode) {
+
+				case KEY_H: {
+
+					if (k.mod.command) {
+						set_show_hidden_files(!show_hidden_files);
+					} else {
+						handled=false;
+					}
+
+				} break;
+				case KEY_F5: {
+
+					invalidate();
+				} break;
+				default: { handled=false; }
+			}
+
+			if (handled)
+				accept_event();
+		}
+	}
 }
 
 void FileDialog::set_enable_multiple_selection(bool p_enable) {
@@ -90,7 +136,6 @@ void FileDialog::_file_entered(const String& p_file) {
 }
 
 void FileDialog::_save_confirm_pressed() {
-	
 	String f=dir_access->get_current_dir().plus_file(file->get_text());
 	emit_signal("file_selected",f);
 	hide();		
@@ -107,6 +152,8 @@ void FileDialog::_post_popup() {
 		file->grab_focus();
 	else
 		tree->grab_focus();
+
+	set_process_unhandled_input(true);
 
 }
 
@@ -156,7 +203,6 @@ void FileDialog::_action_pressed() {
 
 	if (mode==MODE_SAVE_FILE) {
 		
-		String ext = f.extension();
 		bool valid=false;
 
 		if (filter->get_selected()==filter->get_item_count()-1) {
@@ -184,13 +230,21 @@ void FileDialog::_action_pressed() {
 			if (idx>=0 && idx<filters.size()) {
 
 				String flt=filters[idx].get_slice(";",0);
-				for (int j=0;j<flt.get_slice_count(",");j++) {
+				int filterSliceCount=flt.get_slice_count(",");
+				for (int j=0;j<filterSliceCount;j++) {
 
 					String str = (flt.get_slice(",",j).strip_edges());
 					if (f.match(str)) {
 						valid=true;
 						break;
 					}
+				}
+
+				if (!valid && filterSliceCount>0) {
+					String str = (flt.get_slice(",",0).strip_edges());
+					f+=str.substr(1, str.length()-1);
+					file->set_text(f.get_file());
+					valid=true;
 				}
 			} else {
 				valid=true;
@@ -271,13 +325,20 @@ void FileDialog::update_file_list() {
 	List<String> dirs;
 	
 	bool isdir;
+	bool ishidden;
+	bool show_hidden = show_hidden_files;
 	String item;
+
 	while ((item=dir_access->get_next(&isdir))!="") {
-		
-		if (!isdir)
-			files.push_back(item);
-		else
-			dirs.push_back(item);		
+
+		ishidden = dir_access->current_is_hidden();
+
+		if (show_hidden || !ishidden) {
+			if (!isdir)
+				files.push_back(item);
+			else
+				dirs.push_back(item);
+		}
 	}
 	
 	dirs.sort_custom<NoCaseComparator>();
@@ -593,24 +654,23 @@ void FileDialog::_update_drives() {
 		drives->clear();
 		drives->show();
 
-		int current=-1;
-		String abspath = dir_access->get_current_dir();
-
 		for(int i=0;i<dir_access->get_drive_count();i++) {
-			String d = dir_access->get_drive(i);
-			if (abspath.begins_with(d))
-				current=i;
+			String d = dir_access->get_drive(i);			
 			drives->add_item(dir_access->get_drive(i));
 		}
 
-		if (current!=-1)
-			drives->select(current);
+		drives->select(dir_access->get_current_drive());
 
 	}
 }
 
+bool FileDialog::default_show_hidden_files=false;
+
+
 void FileDialog::_bind_methods() {
 	
+	ObjectTypeDB::bind_method(_MD("_unhandled_input"),&FileDialog::_unhandled_input);
+
 	ObjectTypeDB::bind_method(_MD("_tree_selected"),&FileDialog::_tree_selected);
 	ObjectTypeDB::bind_method(_MD("_tree_db_selected"),&FileDialog::_tree_dc_selected);
 	ObjectTypeDB::bind_method(_MD("_dir_entered"),&FileDialog::_dir_entered);
@@ -633,6 +693,8 @@ void FileDialog::_bind_methods() {
 	ObjectTypeDB::bind_method(_MD("get_vbox:VBoxContainer"),&FileDialog::get_vbox);
 	ObjectTypeDB::bind_method(_MD("set_access","access"),&FileDialog::set_access);
 	ObjectTypeDB::bind_method(_MD("get_access"),&FileDialog::get_access);
+	ObjectTypeDB::bind_method(_MD("set_show_hidden_files","show"),&FileDialog::set_show_hidden_files);
+	ObjectTypeDB::bind_method(_MD("is_showing_hidden_files"),&FileDialog::is_showing_hidden_files);
 	ObjectTypeDB::bind_method(_MD("_select_drive"),&FileDialog::_select_drive);
 	ObjectTypeDB::bind_method(_MD("_make_dir"),&FileDialog::_make_dir);
 	ObjectTypeDB::bind_method(_MD("_make_dir_confirm"),&FileDialog::_make_dir_confirm);
@@ -657,9 +719,23 @@ void FileDialog::_bind_methods() {
 }
 
 
+void FileDialog::set_show_hidden_files(bool p_show) {
+	show_hidden_files=p_show;
+	invalidate();
+}
+
+bool FileDialog::is_showing_hidden_files() const {
+	return show_hidden_files;
+}
+
+void FileDialog::set_default_show_hidden_files(bool p_show) {
+	default_show_hidden_files=p_show;
+}
 
 FileDialog::FileDialog() {
-	
+
+	show_hidden_files=default_show_hidden_files;
+
 	VBoxContainer *vbc = memnew( VBoxContainer );
 	add_child(vbc);
 	set_child_rect(vbc);
@@ -671,6 +747,10 @@ FileDialog::FileDialog() {
 	HBoxContainer *pathhb = memnew( HBoxContainer );
 	pathhb->add_child(dir);
 	dir->set_h_size_flags(SIZE_EXPAND_FILL);
+
+	refresh = memnew( ToolButton );
+	refresh->connect("pressed",this,"_update_file_list");
+	pathhb->add_child(refresh);
 
 	drives = memnew( OptionButton );
 	pathhb->add_child(drives);

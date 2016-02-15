@@ -1098,6 +1098,8 @@ def update_version():
 	f.write("#define VERSION_MINOR "+str(version.minor)+"\n")
 	f.write("#define VERSION_REVISION "+str(rev)+"\n")
 	f.write("#define VERSION_STATUS "+str(version.status)+"\n")
+	import datetime
+	f.write("#define VERSION_YEAR "+str(datetime.datetime.now().year)+"\n")
 
 def parse_cg_file(fname, uniforms, sizes, conditionals):
 
@@ -1272,29 +1274,85 @@ def win32_spawn(sh, escape, cmd, args, spawnenv):
 	return exit_code
 """
 
-def android_module_source(self,subpath,manifest=""):
-	base_path = "../../../modules/"+self.current_module+"/"+subpath
-	self.android_source_modules.append(base_path)		
+def android_add_maven_repository(self,url):
+	self.android_maven_repos.append(url)
 
-def android_module_library(self,subpath,manifest=""):
-	base_path = ""
-	if (os.path.isabs(subpath)):
-		base_path=subpath
-	else:
-		base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+subpath
-	self.android_module_libraries.append(base_path)		
+def android_add_dependency(self,depline):
+	self.android_dependencies.append(depline)
 
-def android_module_file(self,file):
-	base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+file
-	self.android_source_files.append(base_path)		
-def android_module_manifest(self,file):
+def android_add_java_dir(self,subpath):
+	base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+subpath
+	self.android_java_dirs.append(base_path)
+
+def android_add_res_dir(self,subpath):
+	base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+subpath
+	self.android_res_dirs.append(base_path)
+def android_add_aidl_dir(self,subpath):
+	base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+subpath
+	self.android_aidl_dirs.append(base_path)
+def android_add_jni_dir(self,subpath):
+	base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+subpath
+	self.android_jni_dirs.append(base_path)
+
+def android_add_to_manifest(self,file):
 	base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+file
 	f = open(base_path,"rb")
 	self.android_manifest_chunk+=f.read()
+def android_add_to_permissions(self,file):
+	base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+file
+	f = open(base_path,"rb")
+	self.android_permission_chunk+=f.read()
+def android_add_to_attributes(self,file):
+	base_path = self.Dir(".").abspath+"/modules/"+self.current_module+"/"+file
+	f = open(base_path,"rb")
+	self.android_appattributes_chunk+=f.read()
 
 def disable_module(self):
 	self.disabled_modules.append(self.current_module)
-	
+
+def use_windows_spawn_fix(self):
+
+    if (os.name!="nt"):
+	return #not needed, only for windows
+
+    self.split_drivers=True
+
+    import subprocess
+
+    def mySubProcess(cmdline,env):
+	    #print "SPAWNED : " + cmdline
+	    startupinfo = subprocess.STARTUPINFO()
+	    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+	    proc = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+		    stderr=subprocess.PIPE, startupinfo=startupinfo, shell = False, env = env)
+	    data, err = proc.communicate()
+	    rv = proc.wait()
+	    if rv:
+		    print "====="
+		    print err
+		    print "====="
+	    return rv
+
+    def mySpawn(sh, escape, cmd, args, env):
+
+	    newargs = ' '.join(args[1:])
+	    cmdline = cmd + " " + newargs
+
+	    rv=0
+	    if len(cmdline) > 32000 and cmd.endswith("ar") :
+		    cmdline = cmd + " " + args[1] + " " + args[2] + " "
+		    for i in range(3,len(args)) :
+			    rv = mySubProcess( cmdline + args[i], env )
+			    if rv :
+				    break
+	    else:
+		    rv = mySubProcess( cmdline, env )
+
+	    return rv
+
+    self['SPAWN'] = mySpawn
+
+
 def save_active_platforms(apnames,ap):
 
 	for x in ap:
@@ -1315,4 +1373,40 @@ def save_active_platforms(apnames,ap):
 		wf = x+"/logo.h"
 		logow = open(wf,"wb")
 		logow.write(str)
+
+
+def colored(sys,env):
+
+	#If the output is not a terminal, do nothing
+	if not sys.stdout.isatty():
+		return
+
+	colors = {}
+	colors['cyan']   = '\033[96m'
+	colors['purple'] = '\033[95m'
+	colors['blue']   = '\033[94m'
+	colors['green']  = '\033[92m'
+	colors['yellow'] = '\033[93m'
+	colors['red']    = '\033[91m'
+	colors['end']    = '\033[0m'
+
+	compile_source_message        = '%sCompiling %s==> %s$SOURCE%s' % (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
+	java_compile_source_message   = '%sCompiling %s==> %s$SOURCE%s' % (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
+	compile_shared_source_message = '%sCompiling shared %s==> %s$SOURCE%s' % (colors['blue'], colors['purple'], colors['yellow'], colors['end'])
+	link_program_message          = '%sLinking Program        %s==> %s$TARGET%s' % (colors['red'], colors['purple'], colors['yellow'], colors['end'])
+	link_library_message          = '%sLinking Static Library %s==> %s$TARGET%s' % (colors['red'], colors['purple'], colors['yellow'], colors['end'])
+	ranlib_library_message        = '%sRanlib Library         %s==> %s$TARGET%s' % (colors['red'], colors['purple'], colors['yellow'], colors['end'])
+	link_shared_library_message   = '%sLinking Shared Library %s==> %s$TARGET%s' % (colors['red'], colors['purple'], colors['yellow'], colors['end'])
+	java_library_message          = '%sCreating Java Archive  %s==> %s$TARGET%s' % (colors['red'], colors['purple'], colors['yellow'], colors['end'])
+
+	env.Append( CXXCOMSTR=[compile_source_message] )
+	env.Append( CCCOMSTR=[compile_source_message] )
+	env.Append( SHCCCOMSTR=[compile_shared_source_message] )
+	env.Append( SHCXXCOMSTR=[compile_shared_source_message] )
+	env.Append( ARCOMSTR=[link_library_message] )
+	env.Append( RANLIBCOMSTR=[ranlib_library_message] )
+	env.Append( SHLINKCOMSTR=[link_shared_library_message] )
+	env.Append( LINKCOMSTR=[link_program_message] )
+	env.Append( JARCOMSTR=[java_library_message] )
+	env.Append( JAVACCOMSTR=[java_compile_source_message] )
 

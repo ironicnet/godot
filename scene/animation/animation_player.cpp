@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -35,10 +35,10 @@ bool AnimationPlayer::_set(const StringName& p_name, const Variant& p_value) {
 
 	String name=p_name;
 
-	if (name=="playback/speed" || name=="speed") { //bw compatibility
+	if (p_name==SceneStringNames::get_singleton()->playback_speed || p_name==SceneStringNames::get_singleton()->speed) { //bw compatibility
 		set_speed(p_value);
 
-	} else if (name=="playback/active") {
+	} else if (p_name==SceneStringNames::get_singleton()->playback_active) {
 		set_active(p_value);
 	} else if (name.begins_with("playback/play")) {
 
@@ -52,16 +52,16 @@ bool AnimationPlayer::_set(const StringName& p_name, const Variant& p_value) {
 	} else if (name.begins_with("anims/")) {
 	
 
-		String which=name.get_slice("/",1);
+		String which=name.get_slicec('/',1);
 		
 		add_animation(which,p_value);
 	} else if (name.begins_with("next/")) {
 
 
-		String which=name.get_slice("/",1);
+		String which=name.get_slicec('/',1);
 		animation_set_next(which,p_value);
 
-	} else if (name=="blend_times") {
+	} else if (p_name==SceneStringNames::get_singleton()->blend_times) {
 	
 		Array array=p_value;
 		int len = array.size();
@@ -77,7 +77,7 @@ bool AnimationPlayer::_set(const StringName& p_name, const Variant& p_value) {
 			set_blend_time(from,to,time);
 		}
 
-	} else if (name=="autoplay") {
+	} else if (p_name==SceneStringNames::get_singleton()->autoplay) {
 		autoplay=p_value;
 	
 	} else
@@ -106,12 +106,12 @@ bool AnimationPlayer::_get(const StringName& p_name,Variant &r_ret) const {
 
 	} else if (name.begins_with("anims/")) {
 	
-		String which=name.get_slice("/",1);
+		String which=name.get_slicec('/',1);
 		
 		r_ret= get_animation(which).get_ref_ptr();
 	} else if (name.begins_with("next/")) {
 
-		String which=name.get_slice("/",1);
+		String which=name.get_slicec('/',1);
 
 		r_ret= animation_get_next(which);
 
@@ -147,14 +147,21 @@ void AnimationPlayer::_get_property_list( List<PropertyInfo> *p_list) const {
 
 	List<String> names;
 
+	List<PropertyInfo> anim_names;
+
 	for( Map<StringName, AnimationData>::Element *E=animation_set.front();E;E=E->next()) {
 
-		p_list->push_back( PropertyInfo( Variant::OBJECT, "anims/"+String(E->key()), PROPERTY_HINT_RESOURCE_TYPE, "Animation",PROPERTY_USAGE_NOEDITOR) );
+		anim_names.push_back( PropertyInfo( Variant::OBJECT, "anims/"+String(E->key()), PROPERTY_HINT_RESOURCE_TYPE, "Animation",PROPERTY_USAGE_NOEDITOR) );
 		if (E->get().next!=StringName())
-			p_list->push_back( PropertyInfo( Variant::STRING, "next/"+String(E->key()), PROPERTY_HINT_NONE, "",PROPERTY_USAGE_NOEDITOR) );
+			anim_names.push_back( PropertyInfo( Variant::STRING, "next/"+String(E->key()), PROPERTY_HINT_NONE, "",PROPERTY_USAGE_NOEDITOR) );
 		names.push_back(E->key());
 	}
 
+	anim_names.sort();
+
+	for( List<PropertyInfo>::Element *E=anim_names.front();E;E=E->next()) {
+		p_list->push_back(E->get());
+	}
 
 	{
 		names.sort();
@@ -204,6 +211,7 @@ void AnimationPlayer::_notification(int p_what) {
 
 			if (!get_tree()->is_editor_hint() && animation_set.has(autoplay)) {
 				play(autoplay);
+				set_autoplay(""); //this line is the fix for autoplay issues with animatio
 			}
 		} break;
 		case NOTIFICATION_PROCESS: {
@@ -223,7 +231,7 @@ void AnimationPlayer::_notification(int p_what) {
 		} break;
 		case NOTIFICATION_EXIT_TREE: {
 		
-			stop_all();
+			//stop_all();
 			clear_caches();
 		} break;
 	}
@@ -268,6 +276,7 @@ void AnimationPlayer::_generate_node_caches(AnimationData* p_anim) {
 		TrackNodeCacheKey key;
 		key.id=id;
 		key.bone_idx=bone_idx;
+
 		
 		if (node_cache_map.has(key)) {
 		
@@ -278,6 +287,7 @@ void AnimationPlayer::_generate_node_caches(AnimationData* p_anim) {
 			node_cache_map[key]=TrackNodeCache();
 			
 			p_anim->node_cache[i]=&node_cache_map[key];
+			p_anim->node_cache[i]->path=a->track_get_path(i);
 			p_anim->node_cache[i]->node=child;
 			p_anim->node_cache[i]->resource=resource;
 			p_anim->node_cache[i]->node_2d=child->cast_to<Node2D>();
@@ -295,7 +305,7 @@ void AnimationPlayer::_generate_node_caches(AnimationData* p_anim) {
 					
 						p_anim->node_cache[i]->bone_idx=p_anim->node_cache[i]->skeleton->find_bone(bone_name);
 						if (p_anim->node_cache[i]->bone_idx<0) {
-							// broken track (unexisting bone)
+							// broken track (nonexistent bone)
 							p_anim->node_cache[i]->skeleton=NULL;
 							p_anim->node_cache[i]->spatial=NULL;
 							printf("bone is %ls\n", String(bone_name).c_str());
@@ -320,6 +330,7 @@ void AnimationPlayer::_generate_node_caches(AnimationData* p_anim) {
 				pa.prop=property;
 				pa.object=resource.is_valid()?(Object*)resource.ptr():(Object*)child;
 				pa.special=SP_NONE;
+				pa.owner=p_anim->node_cache[i];
 				if (false && p_anim->node_cache[i]->node_2d) {
 
 					if (pa.prop==SceneStringNames::get_singleton()->transform_pos)
@@ -410,7 +421,7 @@ void AnimationPlayer::_animation_process_animation(AnimationData* p_anim,float p
 				TrackNodeCache::PropertyAnim *pa = &E->get();
 
 
-				if (a->value_track_is_continuous(i) || p_delta==0) {
+				if (a->value_track_is_continuous(i) || p_delta==0) { //delta == 0 means seek
 
 
 					Variant value=a->value_track_interpolate(i,p_time);
@@ -436,10 +447,42 @@ void AnimationPlayer::_animation_process_animation(AnimationData* p_anim,float p
 						Variant value=a->track_get_key_value(i,F->get());
 						switch(pa->special) {
 
-							case SP_NONE: pa->object->set(pa->prop,value); break; //you are not speshul
-							case SP_NODE2D_POS: static_cast<Node2D*>(pa->object)->set_pos(value); break;
-							case SP_NODE2D_ROT: static_cast<Node2D*>(pa->object)->set_rot(Math::deg2rad(value)); break;
-							case SP_NODE2D_SCALE: static_cast<Node2D*>(pa->object)->set_scale(value); break;
+							case SP_NONE: {
+								bool valid;
+								pa->object->set(pa->prop,value,&valid);  //you are not speshul
+#ifdef DEBUG_ENABLED
+								if (!valid) {
+									ERR_PRINTS("Failed setting track value '"+String(pa->owner->path)+"'. Check if property exists or the type of key is valid");
+								}
+#endif
+
+							} break;
+							case SP_NODE2D_POS: {
+#ifdef DEBUG_ENABLED
+								if (value.get_type()!=Variant::VECTOR2) {
+									ERR_PRINTS("Position key at time "+rtos(p_time)+" in Animation Track '"+String(pa->owner->path)+"' not of type Vector2()");
+								}
+#endif
+								static_cast<Node2D*>(pa->object)->set_pos(value);
+							} break;
+							case SP_NODE2D_ROT: {
+#ifdef DEBUG_ENABLED
+								if (value.is_num()) {
+									ERR_PRINTS("Rotation key at time "+rtos(p_time)+" in Animation Track '"+String(pa->owner->path)+"' not numerical");
+								}
+#endif
+
+								static_cast<Node2D*>(pa->object)->set_rot(Math::deg2rad(value));
+							} break;
+							case SP_NODE2D_SCALE: {
+#ifdef DEBUG_ENABLED
+								if (value.get_type()!=Variant::VECTOR2) {
+									ERR_PRINTS("Scale key at time "+rtos(p_time)+" in Animation Track '"+String(pa->owner->path)+"' not of type Vector2()");
+								}
+#endif
+
+								static_cast<Node2D*>(pa->object)->set_scale(value);
+							} break;
 						}
 
 					}
@@ -607,13 +650,53 @@ void AnimationPlayer::_animation_update_transforms() {
 		ERR_CONTINUE( pa->accum_pass!=accum_pass );
 
 #if 1
-		switch(pa->special) {
+/*		switch(pa->special) {
 
 
 			case SP_NONE: pa->object->set(pa->prop,pa->value_accum); break; //you are not speshul
 			case SP_NODE2D_POS: static_cast<Node2D*>(pa->object)->set_pos(pa->value_accum); break;
 			case SP_NODE2D_ROT: static_cast<Node2D*>(pa->object)->set_rot(Math::deg2rad(pa->value_accum)); break;
 			case SP_NODE2D_SCALE: static_cast<Node2D*>(pa->object)->set_scale(pa->value_accum); break;
+		}*/
+
+		switch(pa->special) {
+
+			case SP_NONE: {
+				bool valid;
+				pa->object->set(pa->prop,pa->value_accum,&valid);  //you are not speshul
+#ifdef DEBUG_ENABLED
+				if (!valid) {
+					ERR_PRINTS("Failed setting key at time "+rtos(playback.current.pos)+" in Animation '"+get_current_animation()+"', Track '"+String(pa->owner->path)+"'. Check if property exists or the type of key is right for the property");
+				}
+#endif
+
+			} break;
+			case SP_NODE2D_POS: {
+#ifdef DEBUG_ENABLED
+				if (pa->value_accum.get_type()!=Variant::VECTOR2) {
+					ERR_PRINTS("Position key at time "+rtos(playback.current.pos)+" in Animation '"+get_current_animation()+"', Track '"+String(pa->owner->path)+"' not of type Vector2()");
+				}
+#endif
+				static_cast<Node2D*>(pa->object)->set_pos(pa->value_accum);
+			} break;
+			case SP_NODE2D_ROT: {
+#ifdef DEBUG_ENABLED
+				if (pa->value_accum.is_num()) {
+					ERR_PRINTS("Rotation key at time "+rtos(playback.current.pos)+" in Animation '"+get_current_animation()+"', Track '"+String(pa->owner->path)+"' not numerical");
+				}
+#endif
+
+				static_cast<Node2D*>(pa->object)->set_rot(Math::deg2rad(pa->value_accum));
+			} break;
+			case SP_NODE2D_SCALE: {
+#ifdef DEBUG_ENABLED
+				if (pa->value_accum.get_type()!=Variant::VECTOR2) {
+					ERR_PRINTS("Scale key at time "+rtos(playback.current.pos)+" in Animation '"+get_current_animation()+"', Track '"+String(pa->owner->path)+"' not of type Vector2()");
+				}
+#endif
+
+				static_cast<Node2D*>(pa->object)->set_scale(pa->value_accum);
+			} break;
 		}
 #else
 
@@ -661,8 +744,11 @@ void AnimationPlayer::_animation_process(float p_delta) {
 
 Error AnimationPlayer::add_animation(const StringName& p_name, const Ref<Animation>& p_animation) {
 
+#ifdef DEBUG_ENABLED
 	ERR_EXPLAIN("Invalid animation name: "+String(p_name));
 	ERR_FAIL_COND_V( String(p_name).find("/")!=-1 || String(p_name).find(":")!=-1 || String(p_name).find(",")!=-1 || String(p_name).find("[")!=-1, ERR_INVALID_PARAMETER );
+#endif
+
 	ERR_FAIL_COND_V( p_animation.is_null() , ERR_INVALID_PARAMETER );
 	
 	//print_line("Add anim: "+String(p_name)+" name: "+p_animation->get_name());
@@ -854,6 +940,11 @@ void AnimationPlayer::clear_queue() {
 	queued.clear();
 };
 
+void AnimationPlayer::play_backwards(const StringName& p_name,float p_custom_blend) {
+
+	play(p_name,p_custom_blend,-1,true);
+}
+
 void AnimationPlayer::play(const StringName& p_name, float p_custom_blend, float p_custom_scale,bool p_from_end) {
 
 	//printf("animation is %ls\n", String(p_name).c_str());
@@ -967,14 +1058,16 @@ String AnimationPlayer::get_current_animation() const {
 
 }
 
-void AnimationPlayer::stop() {
+void AnimationPlayer::stop(bool p_reset) {
 	
 	Playback &c=playback;
 	c.blend.clear();
-	c.current.from=NULL;
+	if (p_reset) {
+		c.current.from=NULL;
+	}
 	_set_process(false);
 	queued.clear();
-    playing = false;
+	playing = false;
 }
 
 void AnimationPlayer::stop_all() {
@@ -1211,7 +1304,8 @@ void AnimationPlayer::_bind_methods() {
 	ObjectTypeDB::bind_method(_MD("get_default_blend_time"),&AnimationPlayer::get_default_blend_time);
 
 	ObjectTypeDB::bind_method(_MD("play","name","custom_blend","custom_speed","from_end"),&AnimationPlayer::play,DEFVAL(""),DEFVAL(-1),DEFVAL(1.0),DEFVAL(false));
-	ObjectTypeDB::bind_method(_MD("stop"),&AnimationPlayer::stop);
+	ObjectTypeDB::bind_method(_MD("play_backwards","name","custom_blend"),&AnimationPlayer::play_backwards,DEFVAL(""),DEFVAL(-1));
+	ObjectTypeDB::bind_method(_MD("stop","reset"),&AnimationPlayer::stop,DEFVAL(true));
 	ObjectTypeDB::bind_method(_MD("stop_all"),&AnimationPlayer::stop_all);
 	ObjectTypeDB::bind_method(_MD("is_playing"),&AnimationPlayer::is_playing);
 	ObjectTypeDB::bind_method(_MD("set_current_animation","anim"),&AnimationPlayer::set_current_animation);
@@ -1269,7 +1363,7 @@ AnimationPlayer::AnimationPlayer() {
 	animation_process_mode=ANIMATION_PROCESS_IDLE;
 	processing=false;
         default_blend_time=0;
-	root=NodePath("..");
+	root=SceneStringNames::get_singleton()->path_pp;
 	playing = false;
 	active=true;
 }

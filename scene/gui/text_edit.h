@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -55,7 +55,7 @@ class TextEdit : public Control  {
 
 		Mode selecting_mode;
 		int selecting_line,selecting_column;
-		bool selecting_test;
+		bool selecting_text;
 
 
 		bool active;
@@ -63,6 +63,7 @@ class TextEdit : public Control  {
 		int from_line,from_column;
 		int to_line,to_column;
 
+		bool shiftclick_left;
 
 	} selection;
 
@@ -79,6 +80,7 @@ class TextEdit : public Control  {
 		Color mark_color;
 		Color breakpoint_color;
 		Color current_line_color;
+		Color brace_mismatch_color;
 
 		int row_height;
 		int line_spacing;
@@ -210,11 +212,14 @@ class TextEdit : public Control  {
 	bool line_numbers;
 	
 	bool auto_brace_completion_enabled;
+	bool brace_matching_enabled;
+	bool auto_indent;
 	bool cut_copy_line;
 
 	uint64_t last_dblclk;
 
 	Timer *idle_detect;
+	Timer *click_select_held;
 	HScrollBar *h_scroll;
 	VScrollBar *v_scroll;
 	bool updating_scrolls;
@@ -236,6 +241,7 @@ class TextEdit : public Control  {
 	void adjust_viewport_to_cursor();
 	void _scroll_moved(double);
 	void _update_scrollbars();
+	void _click_selection_held();
 
 	void _pre_shift_selection();
 	void _post_shift_selection();
@@ -267,7 +273,7 @@ class TextEdit : public Control  {
 	void _confirm_completion();
 	void _update_completion_candidates();
 
-	bool _get_mouse_pos(const Point2i& p_mouse, int &r_row, int &r_col) const;
+	void _get_mouse_pos(const Point2i& p_mouse, int &r_row, int &r_col) const;
 
 protected:
 
@@ -316,9 +322,14 @@ public:
 	inline void set_auto_brace_completion(bool p_enabled) {
 		auto_brace_completion_enabled = p_enabled;
 	}
-	
-	void cursor_set_column(int p_col);
-	void cursor_set_line(int p_row);
+	inline void set_brace_matching(bool p_enabled) {
+		brace_matching_enabled=p_enabled;
+		update();
+	}
+	void set_auto_indent(bool p_auto_indent);
+
+	void cursor_set_column(int p_col, bool p_adjust_viewport=true);
+	void cursor_set_line(int p_row, bool p_adjust_viewport=true);
 
 	int cursor_get_column() const;
 	int cursor_get_line() const;
@@ -386,6 +397,7 @@ public:
 
 	String get_text_for_completion();
 
+    virtual bool is_text_field() const;
 	TextEdit();
 	~TextEdit();
 };

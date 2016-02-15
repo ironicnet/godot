@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -32,6 +32,7 @@
 Thread* (*Thread::create_func)(ThreadCreateCallback,void *,const Settings&)=NULL;
 Thread::ID (*Thread::get_thread_ID_func)()=NULL;
 void (*Thread::wait_to_finish_func)(Thread*)=NULL;
+Error (*Thread::set_name_func)(const String&)=NULL;
 
 Thread::ID Thread::_main_thread_id=0;
 
@@ -57,6 +58,14 @@ void Thread::wait_to_finish(Thread *p_thread) {
 		wait_to_finish_func(p_thread);
 		
 }
+
+Error Thread::set_name(const String &p_name) {
+
+	if (set_name_func)
+		return set_name_func(p_name);
+
+	return ERR_UNAVAILABLE;
+};
 
 Thread::Thread()
 {

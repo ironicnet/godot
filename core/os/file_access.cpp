@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -277,7 +277,9 @@ String FileAccess::get_line() const {
 	return String::utf8(line.get_data());
 }
 
-Vector<String> FileAccess::get_csv_line() const {
+Vector<String> FileAccess::get_csv_line(String delim) const {
+
+	ERR_FAIL_COND_V(delim.length()!=1,Vector<String>());
 
 	String l;
 	int qc=0;
@@ -303,7 +305,7 @@ Vector<String> FileAccess::get_csv_line() const {
 		CharType s[2]={0,0};
 
 
-		if (!in_quote && c==',') {
+		if (!in_quote && c==delim[0]) {
 			strings.push_back(current);
 			current=String();
 		} else if (c=='"') {

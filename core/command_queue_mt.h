@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -174,7 +174,7 @@ class CommandQueueMT {
 		R* ret;
 		SyncSemaphore *sync;
 	
-		virtual void call() { *ret = (instance->*method)(p1); sync->sem->post(); sync->in_use=false; ; }
+		virtual void call() { *ret = (instance->*method)(p1); sync->sem->post(); sync->in_use=false; }
 	};
 	
 	template<class T,class M,class P1,class P2,class R>
@@ -981,7 +981,7 @@ public:
 	
 	void flush_all() {
 			
-		ERR_FAIL_COND(sync);
+		//ERR_FAIL_COND(sync);
 		lock();
 		while (true) {
 			bool exit = !flush_one();

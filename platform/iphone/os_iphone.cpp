@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -31,7 +31,7 @@
 #include "os_iphone.h"
 
 #include "drivers/gles2/rasterizer_gles2.h"
-#include "drivers/gles1/rasterizer_gles1.h"
+
 
 #include "servers/visual/visual_server_raster.h"
 #include "servers/visual/visual_server_wrap_mt.h"
@@ -52,7 +52,7 @@ int OSIPhone::get_video_driver_count() const {
 
 const char * OSIPhone::get_video_driver_name(int p_driver) const {
 
-	return "openglES";
+	return "GLES2";
 };
 
 OSIPhone* OSIPhone::get_singleton() {
@@ -106,13 +106,9 @@ void OSIPhone::initialize(const VideoMode& p_desired,int p_video_driver,int p_au
 	supported_orientations |= ((GLOBAL_DEF("video_mode/allow_vertical", false)?1:0) << PortraitDown);
 	supported_orientations |= ((GLOBAL_DEF("video_mode/allow_vertical_flipped", false)?1:0) << PortraitUp);
 
-#ifdef GLES1_OVERRIDE
-	rasterizer = memnew( RasterizerGLES1 );
-#else
 	rasterizer_gles22 = memnew( RasterizerGLES2(false, false, false) );
 	rasterizer = rasterizer_gles22;
 	rasterizer_gles22->set_base_framebuffer(gl_view_base_fb);
-#endif
 
 	visual_server = memnew( VisualServerRaster(rasterizer) );
 	if (get_render_thread_mode() != RENDER_THREAD_UNSAFE) {
@@ -140,7 +136,8 @@ void OSIPhone::initialize(const VideoMode& p_desired,int p_video_driver,int p_au
 	//
 	physics_server = memnew( PhysicsServerSW );
 	physics_server->init();
-	physics_2d_server = memnew( Physics2DServerSW );
+	//physics_2d_server = memnew( Physics2DServerSW );
+	physics_2d_server = Physics2DServerWrapMT::init_server<Physics2DServerSW>();
 	physics_2d_server->init();
 
 	input = memnew( InputDefault );
@@ -162,6 +159,12 @@ void OSIPhone::initialize(const VideoMode& p_desired,int p_video_driver,int p_au
 #ifdef STOREKIT_ENABLED
 	store_kit = memnew(InAppStore);
 	Globals::get_singleton()->add_singleton(Globals::Singleton("InAppStore", store_kit));
+#endif		
+
+#ifdef ICLOUD_ENABLED
+	icloud = memnew(ICloud);
+	Globals::get_singleton()->add_singleton(Globals::Singleton("ICloud", icloud));
+	//icloud->connect();
 #endif		
 };
 
@@ -223,6 +226,8 @@ void OSIPhone::mouse_button(int p_idx, int p_x, int p_y, bool p_pressed, bool p_
 		queue_event(ev);
 	};
 
+	mouse_list.pressed[p_idx] = p_pressed;
+
 	if (p_use_as_mouse) {
 
 		InputEvent ev;
@@ -237,12 +242,12 @@ void OSIPhone::mouse_button(int p_idx, int p_x, int p_y, bool p_pressed, bool p_
 		ev.mouse_button.x = ev.mouse_button.global_x = p_x;
 		ev.mouse_button.y = ev.mouse_button.global_y = p_y;
 
+		//mouse_list.pressed[p_idx] = p_pressed;
+
 		input->set_mouse_pos(Point2(ev.mouse_motion.x,ev.mouse_motion.y));
 		ev.mouse_button.button_index = BUTTON_LEFT;
 		ev.mouse_button.doubleclick = p_doubleclick;
 		ev.mouse_button.pressed = p_pressed;
-
-		mouse_list.pressed[p_idx] = p_pressed;
 
 		queue_event(ev);
 	};
@@ -449,6 +454,7 @@ bool OSIPhone::has_virtual_keyboard() const {
 extern void _show_keyboard(String p_existing);
 extern void _hide_keyboard();
 extern Error _shell_open(String p_uri);
+extern void _set_keep_screen_on(bool p_enabled);
 
 void OSIPhone::show_virtual_keyboard(const String& p_existing_text,const Rect2& p_screen_rect) {
 	_show_keyboard(p_existing_text);
@@ -462,6 +468,10 @@ Error OSIPhone::shell_open(String p_uri) {
 	return _shell_open(p_uri);
 };
 
+void OSIPhone::set_keep_screen_on(bool p_enabled) {
+	OS::set_keep_screen_on(p_enabled);
+	_set_keep_screen_on(p_enabled);
+};
 
 void OSIPhone::set_cursor_shape(CursorShape p_shape) {
 
@@ -477,6 +487,11 @@ String OSIPhone::get_name() {
 
 	return "iOS";
 };
+
+Size2 OSIPhone::get_window_size() const {
+	
+	return Vector2(video_mode.width, video_mode.height);
+}
 
 bool OSIPhone::has_touchscreen_ui_hint() const {
 

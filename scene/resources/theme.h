@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -33,6 +33,7 @@
 #include "scene/resources/font.h"
 #include "scene/resources/style_box.h"
 #include "scene/resources/texture.h"
+#include "scene/resources/shader.h"
 #include "io/resource_loader.h"
 
 /**
@@ -48,6 +49,7 @@ class Theme : public Resource {
 	HashMap<StringName,HashMap<StringName,Ref<Texture>,StringNameHasher >, StringNameHasher >  icon_map;
 	HashMap<StringName,HashMap<StringName,Ref<StyleBox>,StringNameHasher >,StringNameHasher > style_map;
 	HashMap<StringName,HashMap<StringName,Ref<Font>,StringNameHasher >,StringNameHasher > font_map;
+	HashMap<StringName,HashMap<StringName,Ref<Shader>,StringNameHasher >, StringNameHasher >  shader_map;
 	HashMap<StringName,HashMap<StringName,Color,StringNameHasher >,StringNameHasher > color_map;
 	HashMap<StringName,HashMap<StringName,int,StringNameHasher>,StringNameHasher > constant_map;
 protected:
@@ -86,7 +88,13 @@ public:
 	bool has_icon(const StringName& p_name,const StringName& p_type) const;
 	void clear_icon(const StringName& p_name,const StringName& p_type);
 	void get_icon_list(StringName p_type, List<StringName> *p_list) const;
-	
+
+	void set_shader(const StringName& p_name,const StringName& p_type,const Ref<Shader>& p_shader);
+	Ref<Shader> get_shader(const StringName& p_name,const StringName& p_type) const;
+	bool has_shader(const StringName& p_name,const StringName& p_type) const;
+	void clear_shader(const StringName& p_name,const StringName& p_type);
+	void get_shader_list(const StringName& p_name, List<StringName> *p_list) const;
+
 	void set_stylebox(const StringName& p_name,const StringName& p_type,const Ref<StyleBox>& p_style);
 	Ref<StyleBox> get_stylebox(const StringName& p_name,const StringName& p_type) const;
 	bool has_stylebox(const StringName& p_name,const StringName& p_type) const;
@@ -124,7 +132,7 @@ public:
 
 class ResourceFormatLoaderTheme : public ResourceFormatLoader {
 public:
-	virtual RES load(const String &p_path,const String& p_original_path="");
+	virtual RES load(const String &p_path,const String& p_original_path="",Error *r_error=NULL);
 	virtual void get_recognized_extensions(List<String> *p_extensions) const;
 	virtual bool handles_type(const String& p_type) const;
 	virtual String get_resource_type(const String &p_path) const;

@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -86,8 +86,9 @@ friend class Tree;
 
 		struct Button {
 			int id;
+			bool disabled;
 			Ref<Texture> texture;
-			Button() { id=0; }
+			Button() { id=0; disabled=false; }
 		};
 
 		Vector< Button > buttons;
@@ -127,7 +128,7 @@ friend class Tree;
 
 
 	
-	TreeItem(Tree *p_tree);		
+	TreeItem(Tree *p_tree);
 		
 
 	void _changed_notify(int p_cell);
@@ -172,12 +173,13 @@ public:
 	void set_icon_max_width(int p_column,int p_max);
 	int get_icon_max_width(int p_column) const;
 
-	void add_button(int p_column,const Ref<Texture>& p_button,int p_id=-1);
+	void add_button(int p_column,const Ref<Texture>& p_button,int p_id=-1,bool p_disabled=false);
 	int get_button_count(int p_column) const;
 	Ref<Texture> get_button(int p_column,int p_idx) const;
 	int get_button_id(int p_column,int p_idx) const;
 	void erase_button(int p_column,int p_idx);
 	int get_button_by_id(int p_column,int p_id) const;
+	bool is_button_disabled(int p_column,int p_idx) const;
 	void set_button(int p_column,int p_idx,const Ref<Texture>& p_button);
 
 	/* range works for mode number or mode combo */
@@ -228,6 +230,7 @@ public:
 	void set_tooltip(int p_column, const String& p_tooltip);
 	String get_tooltip(int p_column) const;
 
+
 	void clear_children();
 
 	void move_to_top();
@@ -258,7 +261,18 @@ friend class TreeItem;
 	TreeItem *popup_edited_item;
 	TreeItem *selected_item;
 	TreeItem *edited_item;
+
+
 	int pressed_button;
+	bool pressing_for_editor;
+	String pressing_for_editor_text;
+	Vector2 pressing_pos;
+	Rect2 pressing_item_rect;
+
+	float range_drag_base;
+	bool range_drag_enabled;
+	Vector2 range_drag_capture_pos;
+
 
 	//TreeItem *cursor_item;
 	//int cursor_column;
@@ -289,6 +303,11 @@ friend class TreeItem;
 
 	Vector<ColumnInfo> columns;
 
+	Timer *range_click_timer;
+	TreeItem *range_item_last;
+	bool range_up_last;
+	void _range_click_timeout();
+
 	int compute_item_height(TreeItem *p_item) const;
 	int get_item_height(TreeItem *p_item) const;
 //	void draw_item_text(String p_text,const Ref<Texture>& p_icon,int p_icon_max_w,bool p_tool,Rect2i p_rect,const Color& p_color);
@@ -297,6 +316,7 @@ friend class TreeItem;
 	void select_single_item(TreeItem *p_selected,TreeItem *p_current,int p_col,TreeItem *p_prev=NULL,bool *r_in_range=NULL);
 	int propagate_mouse_event(const Point2i &p_pos,int x_ofs,int y_ofs,bool p_doubleclick,TreeItem *p_item,int p_button,const InputModifierState& p_mod);
 	void text_editor_enter(String p_text);
+	void _text_editor_modal_close();
 	void value_editor_changed(double p_value);
 
 	void popup_select(int p_option);
@@ -399,6 +419,8 @@ friend class TreeItem;
 	bool drag_touching_deaccel;
 	bool click_handled;
 
+	bool hide_folding;
+
 protected:
 	static void _bind_methods();
 	
@@ -453,6 +475,13 @@ public:
 
 	void set_cursor_can_exit_tree(bool p_enable);
 	bool can_cursor_exit_tree() const;
+
+	VScrollBar *get_vscroll_bar() { return v_scroll; }
+
+	void set_hide_folding(bool p_hide);
+	bool is_folding_hidden() const;
+
+
 
 	Tree();
 	~Tree();	

@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -36,7 +36,18 @@
 class LineEdit : public Control {
 	
 	OBJ_TYPE( LineEdit, Control );
-	
+
+public:
+	enum Align {
+
+		ALIGN_LEFT,
+		ALIGN_CENTER,
+		ALIGN_RIGHT,
+		ALIGN_FILL
+	};
+private:
+	Align align;
+
 	bool editable;
 	bool pass;
 	
@@ -46,6 +57,8 @@ class LineEdit : public Control {
 	int cursor_pos;
 	int window_pos;
 	int max_length; // 0 for no maximum
+
+	int cached_width;
 	
 	struct Selection {
 		
@@ -83,7 +96,8 @@ class LineEdit : public Control {
 protected:	
 	static void _bind_methods();	
 public:
-	
+	void set_align(Align p_align);
+	Align get_align() const;
 		
 	virtual Variant get_drag_data(const Point2& p_point);
 	virtual bool can_drop_data(const Point2& p_point,const Variant& p_data) const;
@@ -112,9 +126,14 @@ public:
 	void select(int p_from=0, int p_to=-1);
 
 	virtual Size2 get_minimum_size() const;
+
+    virtual bool is_text_field() const;
 	LineEdit();
 	~LineEdit();
 	
 };
+
+
+VARIANT_ENUM_CAST(LineEdit::Align);
 
 #endif

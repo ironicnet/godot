@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -160,7 +160,20 @@ void Dictionary::_unref() const {
 }
 uint32_t Dictionary::hash() const {
 
-	return hash_djb2_one_64(make_uint64_t(_p));
+	uint32_t h=hash_djb2_one_32(Variant::DICTIONARY);
+
+	List<Variant> keys;
+	get_key_list(&keys);
+
+	for (List<Variant>::Element *E=keys.front();E;E=E->next()) {
+
+		h = hash_djb2_one_32( E->get().hash(), h);
+		h = hash_djb2_one_32( operator[](E->get()).hash(), h);
+
+	}
+
+
+	return h;
 }
 
 Array Dictionary::keys() const {
@@ -186,10 +199,12 @@ Error Dictionary::parse_json(const String& p_json) {
 
 	String errstr;
 	int errline=0;
+	if (p_json != ""){
 	Error err = JSON::parse(p_json,*this,errstr,errline);
 	if (err!=OK) {
 		ERR_EXPLAIN("Error parsing JSON: "+errstr+" at line: "+itos(errline));
 		ERR_FAIL_COND_V(err!=OK,err);
+		}
 	}
 
 	return OK;

@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -107,13 +107,13 @@ InputEvent::operator String() const {
 		
 		} break;
 		case JOYSTICK_MOTION: {
-			str+= "Event: JoyMotion ";
+			str+= "Event: JoystickMotion ";
 			str=str+"Axis: "+itos(joy_motion.axis)+" Value: " +rtos(joy_motion.axis_value);
 			return str;
 
 		} break;
 		case JOYSTICK_BUTTON: {
-			str+= "Event: JoyButton ";
+			str+= "Event: JoystickButton ";
 			str=str+"Pressed: "+itos(joy_button.pressed)+" Index: " +itos(joy_button.button_index)+" pressure "+rtos(joy_button.pressure);
 			return str;
 
@@ -156,6 +156,7 @@ bool InputEvent::is_pressed() const {
 		case MOUSE_BUTTON: return mouse_button.pressed;
 		case JOYSTICK_BUTTON: return joy_button.pressed;
 		case SCREEN_TOUCH: return screen_touch.pressed;
+		case JOYSTICK_MOTION: return InputMap::get_singleton()->event_is_joy_motion_action_pressed(*this);
 		case ACTION: return action.pressed;
 		default: {}
 	}
@@ -171,6 +172,16 @@ bool InputEvent::is_echo() const {
 bool InputEvent::is_action(const String& p_action) const {
 
 	return InputMap::get_singleton()->event_is_action(*this,p_action);
+}
+
+bool InputEvent::is_action_pressed(const String& p_action) const {
+
+	return is_action(p_action) && is_pressed() && !is_echo();
+}
+
+bool InputEvent::is_action_released(const String& p_action) const {
+
+	return is_action(p_action) && !is_pressed();
 }
 
 uint32_t InputEventKey::get_scancode_with_modifiers() const {

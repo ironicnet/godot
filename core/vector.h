@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -42,7 +42,7 @@
 template<class T>
 class Vector {
 
-	mutable void* _ptr;
+	mutable T* _ptr;
  
  	// internal helpers
  
@@ -51,21 +51,21 @@ class Vector {
 		if (!_ptr)
  			return NULL;
  			
-		return reinterpret_cast<SafeRefCount*>(_ptr);
+		return reinterpret_cast<SafeRefCount*>((uint8_t*)_ptr-sizeof(int)-sizeof(SafeRefCount));
  	}
  	
 	_FORCE_INLINE_ int* _get_size() const  {
  	
 		if (!_ptr)
  			return NULL;
-		return reinterpret_cast<int*>(((uint8_t*)(_ptr))+sizeof(SafeRefCount));
+		return reinterpret_cast<int*>((uint8_t*)_ptr-sizeof(int));
  		
  	}
 	_FORCE_INLINE_ T* _get_data() const {
  	
 		if (!_ptr)
  			return NULL;
-		return reinterpret_cast<T*>(((uint8_t*)(_ptr))+sizeof(SafeRefCount)+sizeof(int));
+		return reinterpret_cast<T*>(_ptr);
  		
  	}
  	
@@ -88,11 +88,11 @@ public:
 	_FORCE_INLINE_ void clear() { resize(0); }
 	
 	_FORCE_INLINE_ int size() const {
-		
-		if (!_ptr)
-			return 0;
+		int* size = _get_size();
+		if (size)
+			return *size;
 		else		
-			return *reinterpret_cast<int*>(((uint8_t*)(_ptr))+sizeof(SafeRefCount));
+			return 0;
 	}
 	_FORCE_INLINE_ bool empty() const { return _ptr == 0; }
 	Error resize(int p_size);
@@ -104,7 +104,7 @@ public:
 
 
 	template <class T_val>
-	int find(T_val& p_val) const;
+	int find(const T_val& p_val) const;
 
 	void set(int p_index,T p_elem);
 	T get(int p_index) const;
@@ -149,7 +149,16 @@ public:
 		sort_custom<_DefaultComparator<T> >();
 	}
 
+	void ordered_insert(const T& p_val) {
+			int i;
+			for (i=0; i<size(); i++) {
 
+				if (p_val < operator[](i)) {
+					break;
+				};
+			};
+			insert(i, p_val);
+	}
 
 	void operator=(const Vector& p_from);
 	Vector(const Vector& p_from);
@@ -165,7 +174,7 @@ void Vector<T>::_unref(void *p_data) {
 	if (!p_data)
 		return;
 		
-	SafeRefCount *src = reinterpret_cast<SafeRefCount*>(p_data);
+	SafeRefCount *src = reinterpret_cast<SafeRefCount*>((uint8_t*)p_data-sizeof(int)-sizeof(SafeRefCount));
 	
 	if (!src->unref())
 		return; // still in use
@@ -180,7 +189,7 @@ void Vector<T>::_unref(void *p_data) {
 	}
 	
 	// free mem
-	memfree(p_data);
+	memfree((uint8_t*)p_data-sizeof(int)-sizeof(SafeRefCount));
 
 }
 
@@ -192,7 +201,8 @@ void Vector<T>::_copy_on_write() {
 	
 	if (_get_refcount()->get() > 1 ) {
 		/* in use by more than me */
-		SafeRefCount *src_new=(SafeRefCount *)memalloc(_get_alloc_size(*_get_size()));
+		void* mem_new = memalloc(_get_alloc_size(*_get_size()));
+		SafeRefCount *src_new=(SafeRefCount *)mem_new;
 		src_new->init();
 		int * _size = (int*)(src_new+1);
 		*_size=*_get_size();
@@ -206,13 +216,13 @@ void Vector<T>::_copy_on_write() {
 		}
 		
 		_unref(_ptr);
-		_ptr=src_new;
+		_ptr=_data;
 	}
 
 }
 
 template<class T> template<class T_val>
-int Vector<T>::find(T_val& p_val) const {
+int Vector<T>::find(const T_val &p_val) const {
 
 	int ret = -1;
 	if (size() == 0) 
@@ -251,16 +261,17 @@ Error Vector<T>::resize(int p_size) {
 
 		if (size()==0) {
 			// alloc from scratch
-			_ptr = (T*)memalloc(_get_alloc_size(p_size));
-			ERR_FAIL_COND_V( !_ptr ,ERR_OUT_OF_MEMORY);
+			void* ptr=memalloc(_get_alloc_size(p_size));
+			ERR_FAIL_COND_V( !ptr ,ERR_OUT_OF_MEMORY);
+			_ptr=(T*)((uint8_t*)ptr+sizeof(int)+sizeof(SafeRefCount));
 			_get_refcount()->init(); // init refcount
 			*_get_size()=0; // init size (currently, none)
 
 		} else {
 			
-			void *_ptrnew = (T*)memrealloc(_ptr,_get_alloc_size(p_size));
+			void *_ptrnew = (T*)memrealloc((uint8_t*)_ptr-sizeof(int)-sizeof(SafeRefCount),_get_alloc_size(p_size));
 			ERR_FAIL_COND_V( !_ptrnew ,ERR_OUT_OF_MEMORY);
-			_ptr=_ptrnew;
+			_ptr=(T*)((uint8_t*)_ptrnew+sizeof(int)+sizeof(SafeRefCount));
 		}
 
 		// construct the newly created elements
@@ -282,10 +293,10 @@ Error Vector<T>::resize(int p_size) {
 			t->~T();
 		}
 
-		void *_ptrnew = (T*)memrealloc(_ptr,_get_alloc_size(p_size));
+		void *_ptrnew = (T*)memrealloc((uint8_t*)_ptr-sizeof(int)-sizeof(SafeRefCount),_get_alloc_size(p_size));
 		ERR_FAIL_COND_V( !_ptrnew ,ERR_OUT_OF_MEMORY);
 		
-		_ptr=_ptrnew;
+		_ptr=(T*)((uint8_t*)_ptrnew+sizeof(int)+sizeof(SafeRefCount));
 		
 		*_get_size()=p_size;
 				
@@ -331,12 +342,14 @@ template<class T>
 void Vector<T>::remove(int p_index) {
 
 	ERR_FAIL_INDEX(p_index, size());
-	for (int i=p_index; i<size()-1; i++) {
+	T*p=ptr();
+	int len=size();
+	for (int i=p_index; i<len-1; i++) {
 
-		set(i, get(i+1));
+		p[i]=p[i+1];
 	};
 
-	resize(size()-1);
+	resize(len-1);
 };
 
 template<class T>

@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -49,9 +49,13 @@ void SampleLibraryEditor::_notification(int p_what) {
 
 	if (p_what==NOTIFICATION_ENTER_TREE) {
 		play->set_icon( get_icon("Play","EditorIcons") );
+		play->set_tooltip("Play Sample");
 		stop->set_icon( get_icon("Stop","EditorIcons") );
+		stop->set_tooltip("Stop Sample");
 		load->set_icon( get_icon("Folder","EditorIcons") );
+		load->set_tooltip("Open Sample File(s)");
 		_delete->set_icon( get_icon("Del","EditorIcons") );
+		_delete->set_tooltip("Remove Sample");
 	}
 
 	if (p_what==NOTIFICATION_READY) {
@@ -93,7 +97,7 @@ void SampleLibraryEditor::_file_load_request(const DVector<String>& p_path) {
 			dialog->set_title("Error!");
 			//dialog->get_cancel()->set_text("Close");
 			dialog->get_ok()->set_text("Close");
-			dialog->popup_centered(Size2(300,60));
+			dialog->popup_centered_minsize();
 			return; ///beh should show an error i guess
 		}
 		String basename = path.get_file().basename();
@@ -235,6 +239,7 @@ void SampleLibraryEditor::_update_library() {
 
 	List<StringName> names;
 	sample_library->get_sample_list(&names);
+	names.sort_custom<StringName::AlphCompare>();
 
 	for(List<StringName>::Element *E=names.front();E;E=E->next()) {
 
@@ -331,7 +336,8 @@ SampleLibraryEditor::SampleLibraryEditor() {
 	play->set_pos(Point2( 5, 5 ));
 	play->set_size( Size2(1,1 ) );
 	play->set_toggle_mode(true);
-	//add_child(play);
+	add_child(play);
+	play->hide();
 
 	stop = memnew( Button );
 
@@ -348,13 +354,13 @@ SampleLibraryEditor::SampleLibraryEditor() {
 
 	_delete = memnew( Button );
 
-	file = memnew( FileDialog );
+	file = memnew( EditorFileDialog );
 	add_child(file);
 	List<String> extensions;
 	ResourceLoader::get_recognized_extensions_for_type("Sample",&extensions);
 	for(int i=0;i<extensions.size();i++)
 		file->add_filter("*."+extensions[i]);
-	file->set_mode(FileDialog::MODE_OPEN_FILES);
+	file->set_mode(EditorFileDialog::MODE_OPEN_FILES);
 
 	_delete->set_pos(Point2( 65, 5 ));
 	_delete->set_size( Size2(1,1 ) );
@@ -417,11 +423,16 @@ bool SampleLibraryEditorPlugin::handles(Object *p_object) const {
 void SampleLibraryEditorPlugin::make_visible(bool p_visible) {
 
 	if (p_visible) {
-		sample_library_editor->show();
+		//sample_library_editor->show();
+		button->show();
+		editor->make_bottom_panel_item_visible(sample_library_editor);
 //		sample_library_editor->set_process(true);
 	} else {
 
-		sample_library_editor->hide();
+		if (sample_library_editor->is_visible())
+			editor->hide_bottom_panel();
+		button->hide();
+
 //		sample_library_editor->set_process(false);
 	}
 
@@ -431,11 +442,16 @@ SampleLibraryEditorPlugin::SampleLibraryEditorPlugin(EditorNode *p_node) {
 
 	editor=p_node;
 	sample_library_editor = memnew( SampleLibraryEditor );
-	editor->get_viewport()->add_child(sample_library_editor);
-	sample_library_editor->set_area_as_parent_rect();
+
+	//editor->get_viewport()->add_child(sample_library_editor);
+	sample_library_editor->set_custom_minimum_size(Size2(0,250));
+	button=p_node->add_bottom_panel_item("SampleLibrary",sample_library_editor);
+	button->hide();
+
+	//sample_library_editor->set_area_as_parent_rect();
 //	sample_library_editor->set_anchor( MARGIN_TOP, Control::ANCHOR_END);
 //	sample_library_editor->set_margin( MARGIN_TOP, 120 );
-	sample_library_editor->hide();
+	//sample_library_editor->hide();
 
 
 

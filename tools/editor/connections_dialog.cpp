@@ -5,7 +5,7 @@
 /*                           GODOT ENGINE                                */
 /*                    http://www.godotengine.org                         */
 /*************************************************************************/
-/* Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2007-2016 Juan Linietsky, Ariel Manzur.                 */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -96,7 +96,11 @@ void ConnectDialog::_notification(int p_what) {
 		
 		RID ci = get_canvas_item();
 		get_stylebox("panel","PopupMenu")->draw(ci,Rect2(Point2(),get_size()));		
-	}	
+	}
+
+	if (p_what==NOTIFICATION_ENTER_TREE) {
+		bind_editor->edit(cdbinds);
+	}
 }
 
 void ConnectDialog::_tree_node_selected() {
@@ -163,6 +167,7 @@ void ConnectDialog::edit(Node *p_node) {
 	dst_path->set_text("");
 	dst_method->set_text("");
 	deferred->set_pressed(false);
+	oneshot->set_pressed(false);
 	cdbinds->params.clear();
 	cdbinds->notify_changed();
 }
@@ -172,7 +177,7 @@ void ConnectDialog::ok_pressed() {
 	if (dst_method->get_text()=="") {
 
 		error->set_text("Method in target Node must be specified!");
-		error->popup_centered(Size2(300,80));
+		error->popup_centered_minsize();
 		return;
 	}
 	emit_signal("connected");
@@ -194,6 +199,11 @@ NodePath ConnectDialog::get_dst_path() const {
 bool ConnectDialog::get_deferred() const {
 
 	return deferred->is_pressed();
+}
+
+bool ConnectDialog::get_oneshot() const {
+
+	return oneshot->is_pressed();
 }
 
 StringName ConnectDialog::get_dst_method() const {
@@ -423,12 +433,13 @@ ConnectDialog::ConnectDialog() {
 	dstm_hb->add_child(make_callback);
 
 	deferred = memnew( CheckButton );
-	deferred->set_toggle_mode(true);
-	deferred->set_pressed(true);
 	deferred->set_text("Deferred");
 	dstm_hb->add_child(deferred);
 
-	
+	oneshot = memnew( CheckButton );
+	oneshot->set_text("Oneshot");
+	dstm_hb->add_child(oneshot);
+
 /*
 	realtime = memnew( CheckButton );
 	realtime->set_anchor( MARGIN_TOP, ANCHOR_END );
@@ -449,7 +460,6 @@ ConnectDialog::ConnectDialog() {
 	set_as_toplevel(true);
 
 	cdbinds = memnew( ConnectDialogBinds );
-	bind_editor->edit(cdbinds);
 
 	error = memnew( ConfirmationDialog );
 	add_child(error);
@@ -496,11 +506,13 @@ void ConnectionsDialog::_connect() {
 
 	StringName dst_method=connect_dialog->get_dst_method();
 	bool defer=connect_dialog->get_deferred();
+	bool oshot=connect_dialog->get_oneshot();
 	Vector<Variant> binds = connect_dialog->get_binds();
 	StringArray args =  it->get_metadata(0).operator Dictionary()["args"];
+	int flags = CONNECT_PERSIST | (defer?CONNECT_DEFERRED:0) | (oshot?CONNECT_ONESHOT:0);
 
 	undo_redo->create_action("Connect '"+signal+"' to '"+String(dst_method)+"'");
-	undo_redo->add_do_method(node,"connect",signal,target,dst_method,binds,CONNECT_PERSIST | (defer?CONNECT_DEFERRED:0));
+	undo_redo->add_do_method(node,"connect",signal,target,dst_method,binds,flags);
 	undo_redo->add_undo_method(node,"disconnect",signal,target,dst_method);
 	undo_redo->add_do_method(this,"update_tree");
 	undo_redo->add_undo_method(this,"update_tree");
@@ -530,7 +542,7 @@ void ConnectionsDialog::ok_pressed() {
 		get_ok()->set_disabled(true);
 		return;
 	}
-	if (item->get_parent()==tree->get_root()) {
+	if (item->get_parent()==tree->get_root() || item->get_parent()->get_parent()==tree->get_root()) {
 		//a signal - connect
 		String signal=item->get_metadata(0).operator Dictionary()["name"];
 		String signalname=signal;
@@ -607,6 +619,14 @@ void ConnectionsDialog::_remove_confirm() {
 
 }
 */
+
+struct _ConnectionsDialogMethodInfoSort {
+
+	_FORCE_INLINE_ bool operator()(const MethodInfo& a, const MethodInfo& b) const {
+		return a.name < b.name;
+	}
+};
+
 void ConnectionsDialog::update_tree() {
 	
 	if (!is_visible())
@@ -623,74 +643,133 @@ void ConnectionsDialog::update_tree() {
 
 	node->get_signal_list(&node_signals);
 
-	
-	for(List<MethodInfo>::Element *E=node_signals.front();E;E=E->next()) {
-		
+	//node_signals.sort_custom<_ConnectionsDialogMethodInfoSort>();
+	bool did_script=false;
+	StringName base = node->get_type();
 
-		MethodInfo &mi =E->get();
+	while(base) {
 
-		String signaldesc;
-		signaldesc=mi.name+"(";
-		StringArray argnames;
-		if (mi.arguments.size()) {
-			signaldesc+=" ";
-			for(int i=0;i<mi.arguments.size();i++) {
+		List<MethodInfo> node_signals;
+		Ref<Texture> icon;
+		String name;
 
-				PropertyInfo &pi = mi.arguments[i];
+		if (!did_script) {
 
-				if (i>0)
-					signaldesc+=", ";
-				signaldesc+=Variant::get_type_name(pi.type)+" "+(pi.name==""?String("arg "+itos(i)):pi.name);
-				argnames.push_back(pi.name);
+			Ref<Script> scr = node->get_script();
+			if (scr.is_valid()) {
+				scr->get_script_signal_list(&node_signals);
+				if (scr->get_path().is_resource_file())
+					name=scr->get_path().get_file();
+				else
+					name=scr->get_type();
 
+				if (has_icon(scr->get_type(),"EditorIcons")) {
+					icon=get_icon(scr->get_type(),"EditorIcons");
+				}
 			}
-			signaldesc+=" ";
+
+		} else {
+
+			ObjectTypeDB::get_signal_list(base,&node_signals,true);
+			if (has_icon(base,"EditorIcons")) {
+				icon=get_icon(base,"EditorIcons");
+			}
+			name=base;
 		}
 
-		signaldesc+=")";
-		
-		TreeItem *item=tree->create_item(root);
-		item->set_text(0,signaldesc);
-		Dictionary sinfo;
-		sinfo["name"]=mi.name;
-		sinfo["args"]=argnames;
-		item->set_metadata(0,sinfo);
-		item->set_icon(0,get_icon("Signal","EditorIcons"));
 
-		List<Object::Connection> connections;
-		node->get_signal_connection_list(mi.name,&connections);
+		TreeItem *pitem = NULL;
 
-		for(List<Object::Connection>::Element *F=connections.front();F;F=F->next()) {
+		if (node_signals.size()) {
+			pitem=tree->create_item(root);
+			pitem->set_text(0,name);
+			pitem->set_icon(0,icon);
+			pitem->set_selectable(0,false);
+			pitem->set_editable(0,false);
+			pitem->set_custom_bg_color(0,get_color("prop_subsection","Editor"));
+			node_signals.sort();
+		}
 
-			Object::Connection&c = F->get();
-			if (!(c.flags&CONNECT_PERSIST))
-				continue;
+		for(List<MethodInfo>::Element *E=node_signals.front();E;E=E->next()) {
 
-			Node *target = c.target->cast_to<Node>();
-			if (!target)
-				continue;
 
-			String path = String(node->get_path_to(target))+" :: "+c.method+"()";
-			if (c.flags&CONNECT_DEFERRED)
-				path+=" (deferred)";
-			if (c.binds.size()) {
+			MethodInfo &mi =E->get();
 
-				path+=" binds( ";
-				for(int i=0;i<c.binds.size();i++) {
+			String signaldesc;
+			signaldesc=mi.name+"(";
+			StringArray argnames;
+			if (mi.arguments.size()) {
+				signaldesc+=" ";
+				for(int i=0;i<mi.arguments.size();i++) {
+
+					PropertyInfo &pi = mi.arguments[i];
 
 					if (i>0)
-						path+=", ";
-					path+=c.binds[i].operator String();
+						signaldesc+=", ";
+					String tname="var";
+					if (pi.type!=Variant::NIL) {
+						tname=Variant::get_type_name(pi.type);
+					}
+					signaldesc+=tname+" "+(pi.name==""?String("arg "+itos(i)):pi.name);
+					argnames.push_back(pi.name);
+
 				}
-				path+=" )";
+				signaldesc+=" ";
 			}
 
-			TreeItem *item2=tree->create_item(item);
-			item2->set_text(0,path);
-			item2->set_metadata(0,c);
-			item2->set_icon(0,get_icon("Slot","EditorIcons"));
+			signaldesc+=")";
+
+			TreeItem *item=tree->create_item(pitem);
+			item->set_text(0,signaldesc);
+			Dictionary sinfo;
+			sinfo["name"]=mi.name;
+			sinfo["args"]=argnames;
+			item->set_metadata(0,sinfo);
+			item->set_icon(0,get_icon("Signal","EditorIcons"));
+
+			List<Object::Connection> connections;
+			node->get_signal_connection_list(mi.name,&connections);
+
+			for(List<Object::Connection>::Element *F=connections.front();F;F=F->next()) {
+
+				Object::Connection&c = F->get();
+				if (!(c.flags&CONNECT_PERSIST))
+					continue;
+
+				Node *target = c.target->cast_to<Node>();
+				if (!target)
+					continue;
+
+				String path = String(node->get_path_to(target))+" :: "+c.method+"()";
+				if (c.flags&CONNECT_DEFERRED)
+					path+=" (deferred)";
+				if (c.flags&CONNECT_ONESHOT)
+					path+=" (oneshot)";
+				if (c.binds.size()) {
+
+					path+=" binds( ";
+					for(int i=0;i<c.binds.size();i++) {
+
+						if (i>0)
+							path+=", ";
+						path+=c.binds[i].operator String();
+					}
+					path+=" )";
+				}
+
+				TreeItem *item2=tree->create_item(item);
+				item2->set_text(0,path);
+				item2->set_metadata(0,c);
+				item2->set_icon(0,get_icon("Slot","EditorIcons"));
 
 
+			}
+		}
+
+		if (!did_script) {
+			did_script=true;
+		} else {
+			base=ObjectTypeDB::type_inherits_from(base);
 		}
 	}
 
@@ -713,7 +792,7 @@ void ConnectionsDialog::_something_selected() {
 		get_ok()->set_text("Connect..");
 		get_ok()->set_disabled(true);
 
-	} else if (item->get_parent()==tree->get_root()) {
+	} else if (item->get_parent()==tree->get_root() || item->get_parent()->get_parent()==tree->get_root()) {
 		//a signal - connect
 		get_ok()->set_text("Connect..");
 		get_ok()->set_disabled(false);
